@@ -1,33 +1,29 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { getCorsHeaders } from "../_shared/cors.js";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("PORTFOLIO_ORIGIN") || "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-const respond = (body, status = 200) => new Response(JSON.stringify(body), {
-  status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+const respond = (request, body, status = 200) => new Response(JSON.stringify(body), {
+  status, headers: { ...getCorsHeaders(request), "Content-Type": "application/json" },
 });
 
 Deno.serve(async (request) => {
-  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-  if (request.method !== "POST") return respond({ error: "Method not allowed" }, 405);
+  if (request.method === "OPTIONS") return new Response("ok", { headers: getCorsHeaders(request) });
+  if (request.method !== "POST") return respond(request, { error: "Method not allowed" }, 405);
   try {
     const { password } = await request.json();
     if (typeof password !== "string" || password.length < 10 || password.length > 256) {
-      return respond({ error: "Password must contain at least 10 characters" }, 400);
+      return respond(request, { error: "Password must contain at least 10 characters" }, 400);
     }
     const token = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
-    if (!token) return respond({ error: "Authentication required" }, 401);
+    if (!token) return respond(request, { error: "Authentication required" }, 401);
     const url = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
     if (!url || !serviceKey || !anonKey) throw new Error("Missing function environment configuration");
     const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: userResult, error: userError } = await admin.auth.getUser(token);
     const user = userResult.user;
     if (userError || !user || user.app_metadata?.role !== "admin" || user.app_metadata?.must_change_password !== true || !user.email) {
-      return respond({ error: "Password update is not permitted" }, 403);
+      return respond(request, { error: "Password update is not permitted" }, 403);
     }
     const { error: updateError } = await admin.auth.admin.updateUserById(user.id, {
       password,
@@ -37,7 +33,7 @@ Deno.serve(async (request) => {
     const auth = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data, error } = await auth.auth.signInWithPassword({ email: user.email, password });
     if (error || !data.session) throw error || new Error("Could not create updated session");
-    return respond({
+    return respond(request, {
       access_token: data.session.access_token,
       refresh_token: data.session.refresh_token,
       token_type: data.session.token_type,
@@ -46,6 +42,6 @@ Deno.serve(async (request) => {
     });
   } catch (error) {
     console.error("Initial password update failed", error);
-    return respond({ error: "Unable to update the password" }, 500);
+    return respond(request, { error: "Unable to update the password" }, 500);
   }
 });

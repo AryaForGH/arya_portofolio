@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "bootstrap:admin": "node scripts/bootstrap-admin.mjs"
+    "bootstrap:admin": "node scripts/bootstrap-admin.mjs",
+    "repair:admin": "node scripts/repair-admin.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.0",

@@ -94,7 +94,17 @@ export function AdminLoginPage() {
   async function onSubmit(values) {
     setError("");
     try { await signIn(values.username, values.password); navigate("/admin/dashboard", { replace: true }); }
-    catch (loginError) { console.error("Admin sign-in failed", loginError); setError(t("loginError")); }
+    catch (loginError) {
+      console.error("Admin sign-in failed", loginError);
+      const errorMessages = {
+        INVALID_CREDENTIALS: "loginError",
+        LOGIN_RATE_LIMITED: "loginRateLimited",
+        LOGIN_NETWORK_ERROR: "loginNetworkError",
+        LOGIN_CONFIGURATION_ERROR: "loginServiceError",
+        LOGIN_SERVICE_ERROR: "loginServiceError",
+      };
+      setError(t(errorMessages[loginError.message] || "loginServiceError"));
+    }
   }
   return <main className="login-wrap"><form className="login-card glass form-stack" onSubmit={handleSubmit(onSubmit)}>
     <Link className="brand" to="/">Portfolio<span>.</span></Link><h1>{t("loginTitle")}</h1>

@@ -2,6 +2,17 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { requireSupabase, supabase } from "../lib/supabase.js";
 
 const AuthContext = createContext(null);
+async function getFunctionErrorCode(error) {
+  const response = error?.context;
+  if (response && typeof response.clone === "function") {
+    const payload = await response.clone().json().catch(() => null);
+    if (typeof payload?.code === "string") return payload.code;
+    if (response.status === 429) return "LOGIN_RATE_LIMITED";
+  }
+  if (error?.name === "FunctionsFetchError") return "LOGIN_NETWORK_ERROR";
+  return "LOGIN_SERVICE_ERROR";
+}
+
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(Boolean(supabase));
@@ -21,7 +32,7 @@ export function AuthProvider({ children }) {
   async function signIn(username, password) {
     const client = requireSupabase();
     const { data, error } = await client.functions.invoke("login-username", { body: { username, password } });
-    if (error) throw error;
+    if (error) throw new Error(await getFunctionErrorCode(error));
     if (!data?.access_token || !data?.refresh_token) throw new Error("Invalid login response");
     const { data: authData, error: authError } = await client.auth.setSession(data);
     if (authError) throw authError;
