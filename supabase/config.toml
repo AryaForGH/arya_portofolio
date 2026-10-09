@@ -1,0 +1,11 @@
+[functions.login-username]
+verify_jwt = false
+entrypoint = "./functions/login-username/index.js"
+
+[functions.contact-submit]
+verify_jwt = false
+entrypoint = "./functions/contact-submit/index.js"
+
+[functions.change-password]
+verify_jwt = false
+entrypoint = "./functions/change-password/index.js"
