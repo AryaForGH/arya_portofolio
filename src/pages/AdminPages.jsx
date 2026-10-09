@@ -12,40 +12,40 @@ import { uploadFileWithProgress } from "../lib/storage.js";
 
 const schema = {
   profiles: { title: "profile", fields: [
-    ["full_name", "text"], ["profession", "json"], ["headline", "json"], ["bio", "json", true], ["education", "json"],
-    ["location", "text"], ["phone", "tel"], ["email", "email"], ["avatar_url", "url"], ["cv_url", "url"], ["availability_text", "json"],
-    ["section_visibility", "json", true], ["seo_title", "json"], ["seo_description", "json", true], ["published", "boolean"],
+    ["full_name", "text"], ["profession", "translation"], ["headline", "translation"], ["bio", "translation", true], ["education", "translation"],
+    ["location", "text"], ["phone", "tel"], ["email", "email"], ["avatar_url", "image"], ["availability_text", "translation"],
+    ["section_visibility", "json", true], ["seo_title", "translation"], ["seo_description", "translation", true], ["published", "boolean"],
   ] },
   projects: { title: "projects", fields: [
-    ["slug", "text"], ["title", "json"], ["short_description", "json", true], ["description", "json", true],
-    ["thumbnail_url", "url"], ["gallery_urls", "json", true], ["category", "text"], ["technologies", "json"],
+    ["slug", "text"], ["title", "translation"], ["short_description", "translation", true], ["description", "translation", true],
+    ["thumbnail_url", "image"], ["gallery_urls", "images", true], ["category", "text"], ["technologies", "list"],
     ["year", "number"], ["status", "text"], ["featured", "boolean"], ["github_url", "url"], ["live_url", "url"],
     ["sort_order", "number"], ["published", "boolean"],
   ] },
   certificates: { title: "certificates", fields: [
-    ["title", "json"], ["issuer", "text"], ["issue_date", "date"], ["expiry_date", "date"], ["credential_id", "text"],
-    ["verification_url", "url"], ["preview_url", "url"], ["pdf_url", "url"], ["description", "json", true],
+    ["title", "translation"], ["issuer", "text"], ["issue_date", "date"], ["expiry_date", "date"], ["credential_id", "text"],
+    ["verification_url", "url"], ["preview_url", "image"], ["pdf_url", "url"], ["description", "translation", true],
     ["category", "text"], ["sort_order", "number"], ["published", "boolean"],
   ] },
   experiences: { title: "experiences", fields: [
-    ["organization", "text"], ["position", "json"], ["experience_type", "text"], ["location", "text"],
-    ["start_date", "date"], ["end_date", "date"], ["is_current", "boolean"], ["description", "json", true],
-    ["responsibilities", "json", true], ["achievements", "json", true], ["logo_url", "url"],
+    ["organization", "text"], ["position", "translation"], ["experience_type", "text"], ["location", "text"],
+    ["start_date", "date"], ["end_date", "date"], ["is_current", "boolean"], ["description", "translation", true],
+    ["responsibilities", "list", true], ["achievements", "list", true], ["logo_url", "image"],
     ["sort_order", "number"], ["published", "boolean"],
   ] },
   educations: { title: "educationTitle", fields: [
-    ["institution", "text"], ["degree", "json"], ["field_of_study", "json"], ["location", "text"],
+    ["institution", "text"], ["degree", "translation"], ["field_of_study", "translation"], ["location", "text"],
     ["start_date", "date"], ["end_date", "date"], ["is_current", "boolean"],
-    ["description", "json", true], ["achievements", "json", true], ["grade", "text"],
-    ["logo_url", "url"], ["sort_order", "number"], ["published", "boolean"],
+    ["description", "translation", true], ["achievements", "list", true], ["grade", "text"],
+    ["logo_url", "image"], ["sort_order", "number"], ["published", "boolean"],
   ] },
   services: { title: "services", fields: [
-    ["name", "json"], ["category", "text"], ["description", "json", true], ["price_min", "number"],
+    ["name", "translation"], ["category", "text"], ["description", "translation", true], ["price_min", "number"],
     ["price_max", "number"], ["price_fixed", "boolean"], ["currency", "text"], ["estimated_duration", "text"],
-    ["features", "json", true], ["revisions", "number"], ["complexity", "text"], ["featured", "boolean"],
-    ["available", "boolean"], ["terms", "json", true], ["sort_order", "number"], ["published", "boolean"],
+    ["features", "list", true], ["revisions", "number"], ["complexity", "text"], ["featured", "boolean"],
+    ["available", "boolean"], ["terms", "translation", true], ["sort_order", "number"], ["published", "boolean"],
   ] },
-  skills: { title: "skills", fields: [["name", "json"], ["category", "text"], ["proficiency", "number"], ["sort_order", "number"], ["published", "boolean"]] },
+  skills: { title: "skills", fields: [["name", "translation"], ["category", "text"], ["proficiency", "number"], ["sort_order", "number"], ["published", "boolean"]] },
   social_links: { title: "social_links", fields: [["platform", "text"], ["url", "url"], ["sort_order", "number"], ["published", "boolean"]] },
   contact_messages: { title: "contact_messages", fields: [["name", "text"], ["email", "email"], ["message", "textarea", true], ["read_at", "datetime-local"]] },
   site_settings: { title: "site_settings", fields: [["key", "text"], ["value", "json", true], ["description", "text"], ["is_public", "boolean"]] },
@@ -77,10 +77,32 @@ function toDbValue(value, type) {
   return value;
 }
 function initialValues(config, record) {
-  return Object.fromEntries(config.fields.map(([name, type]) => [
-    name, record?.[name] == null ? (type === "boolean" ? false : "") : type === "json" ? jsonValue(record[name]) : record[name],
-  ]));
+  return Object.fromEntries(config.fields.flatMap(([name, type]) => {
+    const value = record?.[name];
+    if (type === "translation") return [
+      [`${name}_id`, value?.id || ""],
+      [`${name}_en`, value?.en || ""],
+    ];
+    if (type === "list") return [[name, Array.isArray(value) ? value.map((entry) => typeof entry === "string"
+      ? entry : `${entry?.id || ""} || ${entry?.en || ""}`).join("\n") : ""]];
+    if (type === "images") return [[name, Array.isArray(value) ? value : []]];
+    return [[name, value == null ? (type === "boolean" ? false : "") : type === "json" ? jsonValue(value) : value]];
+  }));
 }
+
+const imageBuckets = {
+  profiles: "profile-images",
+  projects: "project-images",
+  certificates: "certificates",
+  experiences: "project-images",
+  educations: "project-images",
+};
+
+const imageLimits = {
+  "profile-images": 10,
+  "project-images": 10,
+  certificates: 10,
+};
 
 export function AdminLoginPage() {
   const { signIn } = useAuth();
@@ -169,8 +191,7 @@ export function AdminResourcePage({ resource }) {
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(0);
   const [toast, setToast] = useState("");
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [imagePreview, setImagePreview] = useState("");
+  const [stagedMedia, setStagedMedia] = useState({});
   const form = useForm({ defaultValues: initialValues(config, null) });
 
   async function load() {
@@ -180,40 +201,96 @@ export function AdminResourcePage({ resource }) {
     finally { setLoading(false); }
   }
   useEffect(() => { load(); }, [resource]);
-  useEffect(() => {
-    if (!selectedImage) { setImagePreview(""); return undefined; }
-    const url = URL.createObjectURL(selectedImage);
-    setImagePreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [selectedImage]);
+  function clearStagedMedia() {
+    Object.values(stagedMedia).flat().forEach(({ preview }) => URL.revokeObjectURL(preview));
+    setStagedMedia({});
+  }
   function openEditor(record = null) {
     setEditing(record || {});
     form.reset(initialValues(config, record));
-    setSelectedImage(null);
+    clearStagedMedia();
     if (resource === "profiles") form.setValue("education_visible", record?.section_visibility?.education !== false);
+  }
+  function selectImages(field, fileList, multiple) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const bucket = imageBuckets[resource];
+    const maxSize = (imageLimits[bucket] || 10) * 1024 * 1024;
+    const valid = files.filter((file) =>
+      ["image/jpeg", "image/png", "image/webp"].includes(file.type) &&
+      /\.(jpe?g|png|webp)$/i.test(file.name) &&
+      file.size > 0 && file.size <= maxSize);
+    if (valid.length !== files.length) {
+      setError(t("invalidImageUpload").replace("{size}", String(imageLimits[bucket] || 10)));
+    } else setError("");
+    if (!valid.length) return;
+    const next = valid.map((file) => ({ file, preview: URL.createObjectURL(file) }));
+    setStagedMedia((current) => {
+      const old = current[field] || [];
+      const appended = multiple ? [...old, ...next] : next;
+      (multiple ? [] : old).forEach(({ preview }) => URL.revokeObjectURL(preview));
+      return { ...current, [field]: appended };
+    });
+  }
+  function removeStagedImage(field, index) {
+    setStagedMedia((current) => {
+      const existing = current[field] || [];
+      const removed = existing[index];
+      if (removed) URL.revokeObjectURL(removed.preview);
+      return { ...current, [field]: existing.filter((_, itemIndex) => itemIndex !== index) };
+    });
   }
   async function save(values) {
     setSaving(true); setError("");
-    let uploadedLogoPath = null;
+    const uploadedPaths = [];
+    let persisted = false;
     try {
-      if (requiredFields[resource]?.some((field) => !String(values[field] ?? "").trim())) throw new Error(t("required"));
+      if (requiredFields[resource]?.some((field) => {
+        const definition = config.fields.find(([name]) => name === field);
+        return definition?.[1] === "translation"
+          ? !values[`${field}_id`]?.trim() && !values[`${field}_en`]?.trim()
+          : !String(values[field] ?? "").trim();
+      })) throw new Error(t("required"));
       if (resource === "educations" && values.is_current && values.end_date) throw new Error(t("eduCurrentEndDate"));
       if (resource === "educations" && values.start_date && values.end_date && values.end_date < values.start_date) throw new Error(t("eduInvalidDates"));
-      const payload = Object.fromEntries(config.fields.map(([key, type]) => [key, toDbValue(values[key], type)]));
       const client = requireSupabase();
+      const payload = {};
+      for (const [key, type] of config.fields) {
+        if (type === "translation") {
+          payload[key] = Object.fromEntries(["id", "en"]
+            .map((language) => [language, values[`${key}_${language}`]?.trim() || ""])
+            .filter(([, text]) => text));
+        } else if (type === "list") {
+          payload[key] = String(values[key] || "").split(/\r?\n/).map((entry) => {
+            const [id, en] = entry.split(" || ").map((part) => part.trim());
+            if (en !== undefined) return Object.fromEntries([["id", id], ["en", en]].filter(([, text]) => text));
+            return id;
+          }).filter(Boolean);
+        } else if (type === "images") {
+          payload[key] = Array.isArray(values[key]) ? [...values[key]] : [];
+        } else if (type === "image") {
+          payload[key] = values[key] || "";
+        } else {
+          payload[key] = toDbValue(values[key], type);
+        }
+      }
       if (resource === "profiles") {
         const visibility = payload.section_visibility && typeof payload.section_visibility === "object" && !Array.isArray(payload.section_visibility)
           ? payload.section_visibility : {};
         payload.section_visibility = { ...visibility, education: Boolean(values.education_visible) };
       }
-      if (resource === "educations" && selectedImage) {
-        const path = `${crypto.randomUUID()}-${selectedImage.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
-        const { error: uploadError } = await client.storage.from("project-images").upload(path, selectedImage, {
-          contentType: selectedImage.type, upsert: false,
-        });
-        if (uploadError) throw uploadError;
-        uploadedLogoPath = path;
-        payload.logo_url = client.storage.from("project-images").getPublicUrl(path).data.publicUrl;
+      const storage = client.storage.from(imageBuckets[resource] || "project-images");
+      for (const [field, staged] of Object.entries(stagedMedia)) {
+        const urls = [];
+        for (const { file } of staged) {
+          const path = `${crypto.randomUUID()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "-")}`;
+          const { error: uploadError } = await storage.upload(path, file, { contentType: file.type, upsert: false });
+          if (uploadError) throw uploadError;
+          uploadedPaths.push(path);
+          urls.push(storage.getPublicUrl(path).data.publicUrl);
+        }
+        if (field === "gallery_urls") payload[field] = [...(payload[field] || []), ...urls];
+        else if (urls.length) payload[field] = urls[urls.length - 1];
       }
       const request = client.from(resource);
       if (isMessages) {
@@ -226,14 +303,15 @@ export function AdminResourcePage({ resource }) {
         const { error: insertError } = await request.insert(payload);
         if (insertError) throw insertError;
       }
-      setEditing(null); setSelectedImage(null); await load(); setToast(t("saveSuccess"));
+      persisted = true;
+      setEditing(null); clearStagedMedia(); await load(); setToast(t("saveSuccess"));
     } catch (saveError) {
-      if (uploadedLogoPath) {
-        const { error: cleanupError } = await requireSupabase().storage.from("project-images").remove([uploadedLogoPath]);
-        if (cleanupError) console.error("Unable to clean up an unused uploaded education logo", cleanupError);
+      if (uploadedPaths.length && !persisted) {
+        const { error: cleanupError } = await requireSupabase().storage.from(imageBuckets[resource] || "project-images").remove(uploadedPaths);
+        if (cleanupError) console.error("Unable to clean up uploaded media after its content save failed", cleanupError);
       }
       console.error(`Unable to save ${resource}`, saveError);
-      setError(saveError.message === t("required") || saveError.message === t("eduCurrentEndDate") || saveError.message === t("eduInvalidDates") || saveError.message?.includes("JSON") ? saveError.message : t("genericError"));
+      setError([t("required"), t("eduCurrentEndDate"), t("eduInvalidDates")].includes(saveError.message) || saveError.message?.includes("JSON") ? saveError.message : t("genericError"));
     }
     finally { setSaving(false); }
   }
@@ -262,26 +340,59 @@ export function AdminResourcePage({ resource }) {
     {error && <div role="alert" className="error-state" style={{ marginBottom: 15 }}>{error}<div style={{ marginTop: 10 }}><button className="button" onClick={load}>{t("retry")}</button></div></div>}
     {toast && <div className="toast" role="status">{toast}<button className="small-button" style={{ marginLeft: 12 }} onClick={() => setToast("")}>×</button></div>}
     {editing && <section className="admin-panel" style={{ marginBottom: 20 }}>
-      <form className="admin-form" onSubmit={form.handleSubmit(save)}>{config.fields.map(([name, type, wide]) => {
-        const value = form.watch(name);
-        if (resource === "educations" && name === "end_date" && form.watch("is_current")) return null;
-        const props = { ...form.register(name), className: type === "textarea" || type === "json" ? "textarea-field" : "field", ...(type === "tel" ? { maxLength: 32 } : {}) };
-        return <label key={name} className={wide || type === "textarea" || type === "json" ? "wide" : ""}>{fieldLabel(name, t)}
-          {type === "boolean" ? <input type="checkbox" checked={Boolean(value)} onChange={(event) => form.setValue(name, event.target.checked)} /> :
-            type === "textarea" || type === "json" ? <textarea {...props} rows={type === "json" ? 4 : 5} placeholder={type === "json" ? t("jsonHint") : ""} /> :
-              <input {...props} type={type} required={requiredFields[resource]?.includes(name)} />}
-        </label>;
-      })}
-        {resource === "educations" && <label className="wide">{t("chooseInstitutionLogo")}<input className="field" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (!file) return;
-          if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || !/\.(jpe?g|png|webp)$/i.test(file.name) || file.size > 5 * 1024 * 1024) {
-            setError(t("invalidLogo")); event.target.value = ""; return;
+      <form className="admin-form" onSubmit={form.handleSubmit(save)}>
+        <p className="admin-form-help wide">{t("adminInputHelp")}</p>
+        {config.fields.map(([name, type, wide]) => {
+          const value = form.watch(name);
+          if (resource === "educations" && name === "end_date" && form.watch("is_current")) return null;
+          const isWide = wide || ["textarea", "json", "translation", "list", "image", "images"].includes(type);
+          const props = { ...form.register(name), className: type === "textarea" || type === "json" || type === "list" ? "textarea-field" : "field", ...(type === "tel" ? { maxLength: 32 } : {}) };
+          if (type === "translation") return <fieldset key={name} className={`admin-field-group${isWide ? " wide" : ""}`}>
+            <legend>{fieldLabel(name, t)}</legend><p className="admin-field-hint">{t("translationInputHelp")}</p>
+            <div className="admin-translation-fields">
+              {["id", "en"].map((language) => <label key={language}>{t(language === "id" ? "indonesian" : "english")}
+                <textarea {...form.register(`${name}_${language}`)} className="textarea-field" rows={name === "bio" || name === "description" ? 4 : 2} />
+              </label>)}
+            </div>
+          </fieldset>;
+          if (type === "image" || type === "images") {
+            const currentImages = type === "images" ? (Array.isArray(value) ? value : []) : (value ? [value] : []);
+            const pendingImages = stagedMedia[name] || [];
+            return <div key={name} className={`admin-field-group media-field${isWide ? " wide" : ""}`}>
+              <span className="admin-field-label">{fieldLabel(name, t)}</span>
+              <p className="admin-field-hint">{t(type === "images" ? "galleryInputHelp" : "imageInputHelp").replace("{size}", String(imageLimits[imageBuckets[resource]] || 10))}</p>
+              <label className="button media-picker"><Upload size={15} />{t("choosePhotos")}
+                <input type="file" accept="image/jpeg,image/png,image/webp" multiple={type === "images"} onChange={(event) => {
+                  selectImages(name, event.target.files, type === "images");
+                  event.target.value = "";
+                }} />
+              </label>
+              {(currentImages.length > 0 || pendingImages.length > 0) && <div className="media-preview-grid">
+                {currentImages.map((url, index) => <figure key={`${url}-${index}`} className="media-preview-item">
+                  <img src={url} alt="" loading="lazy" />
+                  <button type="button" className="small-button" aria-label={t("removePhoto")} onClick={() => {
+                    if (type === "images") form.setValue(name, currentImages.filter((_, imageIndex) => imageIndex !== index), { shouldDirty: true });
+                    else form.setValue(name, "", { shouldDirty: true });
+                  }}><Trash2 size={14} /></button>
+                </figure>)}
+                {pendingImages.map(({ file, preview }, index) => <figure key={`${file.name}-${index}`} className="media-preview-item">
+                  <img src={preview} alt={file.name} />
+                  <button type="button" className="small-button" aria-label={t("removePhoto")} onClick={() => removeStagedImage(name, index)}><Trash2 size={14} /></button>
+                </figure>)}
+              </div>}
+            </div>;
           }
-          setError(""); setSelectedImage(file); event.target.value = "";
-        }} />{imagePreview && <img src={imagePreview} alt={t("imagePreview")} className="education-admin-preview" />}{!imagePreview && form.watch("logo_url") && <img src={form.watch("logo_url")} alt="" className="education-admin-preview" />}</label>}
+          if (type === "list") return <label key={name} className={isWide ? "wide admin-field-with-hint" : "admin-field-with-hint"}>{fieldLabel(name, t)}
+            <span className="admin-field-hint">{t("listInputHelp")}</span><textarea {...props} rows={4} placeholder={t("listInputPlaceholder")} />
+          </label>;
+          return <label key={name} className={isWide ? "wide" : ""}>{fieldLabel(name, t)}
+            {type === "boolean" ? <input type="checkbox" checked={Boolean(value)} onChange={(event) => form.setValue(name, event.target.checked)} /> :
+              type === "textarea" || type === "json" ? <><textarea {...props} rows={type === "json" ? 4 : 5} placeholder={type === "json" ? t("jsonHint") : ""} />{type === "json" && <span className="admin-field-hint">{t("advancedJsonHelp")}</span>}</> :
+                <input {...props} type={type} required={requiredFields[resource]?.includes(name)} />}
+          </label>;
+        })}
         {resource === "profiles" && <label className="wide visibility-toggle"><input type="checkbox" checked={Boolean(form.watch("education_visible"))} onChange={(event) => form.setValue("education_visible", event.target.checked)} />{t("educationVisibility")}</label>}
-        <div className="form-actions"><button type="button" className="button button-quiet" onClick={() => setEditing(null)}>{t("cancel")}</button><button disabled={saving} className="button button-primary">{saving ? t("sending") : t("save")}</button></div>
+        <div className="form-actions"><button type="button" className="button button-quiet" onClick={() => { setEditing(null); clearStagedMedia(); }}>{t("cancel")}</button><button disabled={saving} className="button button-primary">{saving ? t("sending") : t("save")}</button></div>
       </form>
     </section>}
     <section className="admin-panel">
